@@ -144,11 +144,17 @@ export function configureStore<
   M extends Middlewares<S> = [ThunkMiddlewareFor<S>],
   E extends Enhancers = [StoreEnhancer]
 >(options: ConfigureStoreOptions<S, A, M, E>): EnhancedStore<S, A, M, E> {
+
+  /* 
+  curryGetDefaultMiddleware函数
+    返回一个curriedGetDefaultMiddleware函数
+      返回getDefaultMiddleware函数执行的结果
+  */
   const curriedGetDefaultMiddleware = curryGetDefaultMiddleware<S>()
 
   const {
     reducer = undefined,
-    middleware = curriedGetDefaultMiddleware(),
+    middleware = curriedGetDefaultMiddleware(), // 函数curriedGetDefaultMiddleware执行的结果就是getDefaultMiddleware函数执行的结果
     devTools = true,
     preloadedState = undefined,
     enhancers = undefined,
@@ -157,8 +163,13 @@ export function configureStore<
   let rootReducer: Reducer<S, A>
 
   if (typeof reducer === 'function') {
+    // 函数类型直接作为root reducer
     rootReducer = reducer
   } else if (isPlainObject(reducer)) {
+    // 对象类型需要进行合并 // +++
+    // benxiaohaiw/redux-source-analysis-v5.0.0-alpha.0/src/combineReducers.ts下的combineReducers函数
+    // 会返回一个函数在这里直接作为root reducer // +++
+    // (state = {}, action) => {...}
     rootReducer = combineReducers(reducer) as unknown as Reducer<S, A>
   } else {
     throw new Error(
@@ -167,8 +178,12 @@ export function configureStore<
   }
 
   let finalMiddleware = middleware
+
+  // 是否为函数类型
   if (typeof finalMiddleware === 'function') {
+    // 直接把curriedGetDefaultMiddleware函数作为参数传入进去然后执行finalMiddleware函数
     finalMiddleware = finalMiddleware(curriedGetDefaultMiddleware)
+    // 要求返回值是一个数组 // +++
 
     if (!IS_PRODUCTION && !Array.isArray(finalMiddleware)) {
       throw new Error(
@@ -176,6 +191,8 @@ export function configureStore<
       )
     }
   }
+
+  // 数组中的每一项都必须是一个函数 // +++
   if (
     !IS_PRODUCTION &&
     finalMiddleware.some((item: any) => typeof item !== 'function')
@@ -185,10 +202,30 @@ export function configureStore<
     )
   }
 
-  const middlewareEnhancer: StoreEnhancer = applyMiddleware(...finalMiddleware)
+  // benxiaohaiw/redux-source-analysis-v5.0.0-alpha.0/src/applyMiddleware.ts
+  // 应用中间件
+  // 返回中间件增强器 // +++
+  const middlewareEnhancer: StoreEnhancer = applyMiddleware(...finalMiddleware) // finalMiddleware是一个数组
+  /* 
+  applyMiddleware函数
+    返回(createStore) => {
+      返回(reducer, preloadedState) => {
+        ...
+        返回对象
+      }
+    }
+  */
 
+  // benxiaohaiw/redux-source-analysis-v5.0.0-alpha.0/src/compose.ts
+  // compose: 组合
   let finalCompose = compose
+  // compose函数参数没有则返回arg => arg函数
+  // 只有一个函数参数则返回该函数
+  // 而传入多个函数参数时
+  // compose函数参数是一个函数的数组来讲 - 最终调用开关交给了外部 - 且参数数组中的函数是倒序一一执行的，且后一个函数执行后的结果作为前一个函数执行时的参数 // +++
 
+  // 是否开启devTools
+  // 开发者工具
   if (devTools) {
     finalCompose = composeWithDevTools({
       // Enable capture of stack traces for dispatched Redux actions
@@ -197,15 +234,22 @@ export function configureStore<
     })
   }
 
-  let storeEnhancers: Enhancers = [middlewareEnhancer]
+  // 准备数组
+  let storeEnhancers: Enhancers = [middlewareEnhancer] // +++
 
+  // 参数enhancers是否为数组
   if (Array.isArray(enhancers)) {
-    storeEnhancers = [middlewareEnhancer, ...enhancers]
-  } else if (typeof enhancers === 'function') {
-    storeEnhancers = enhancers(storeEnhancers)
+    storeEnhancers = [middlewareEnhancer, ...enhancers] // 直接放在后面
+  } else if (typeof enhancers === 'function') { // 是否为函数
+    storeEnhancers = enhancers(storeEnhancers) // 把准备的数组作为参数传入进去执行此函数 // +++
   }
 
+  // 最终的storeEnhancers需是一个数组
   const composedEnhancer = finalCompose(...storeEnhancers) as StoreEnhancer<any>
+  // 以生产环境为例子则这里的finalCompose就是compose函数
+  // 那么它的执行结果就是compose函数执行后返回的最终调用开关函数 // +++
 
-  return createStore(rootReducer, preloadedState, composedEnhancer)
+  // benxiaohaiw/redux-source-analysis-v5.0.0-alpha.0/src/createStore.ts
+  // 创建store // +++
+  return createStore(rootReducer, preloadedState, composedEnhancer) // root reducer, undefined, compose函数执行后返回的最终调用开关函数
 }

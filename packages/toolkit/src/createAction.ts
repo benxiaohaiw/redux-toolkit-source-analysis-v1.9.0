@@ -258,31 +258,49 @@ export function createAction<
   prepareAction: PA
 ): PayloadActionCreator<ReturnType<PA>['payload'], T, PA>
 
-export function createAction(type: string, prepareAction?: Function): any {
-  function actionCreator(...args: any[]) {
+export function createAction(type: string, prepareAction?: Function): any { // 创建action返回actionCreator函数
+
+  // +++
+  function actionCreator(...args: any[]) { // action创建者
+    // 是否有prepareAction函数
     if (prepareAction) {
-      let prepared = prepareAction(...args)
+      let prepared = prepareAction(...args) // 执行
+      /* 
+      {
+        payload
+        meta
+        error
+      }
+      */
+
       if (!prepared) {
         throw new Error('prepareAction did not return an object')
       }
 
+      // 返回action对象
       return {
         type,
-        payload: prepared.payload,
+        payload: prepared.payload, // 
         ...('meta' in prepared && { meta: prepared.meta }),
         ...('error' in prepared && { error: prepared.error }),
       }
     }
-    return { type, payload: args[0] }
+
+    // 没有prepareAction函数则直接返回action对象
+    return { type, payload: args[0] } // payload就是当前actionCreator函数的第一个参数 // +++
   }
 
+  // toString函数的结果就是字符串type值
   actionCreator.toString = () => `${type}`
 
+  /// type
   actionCreator.type = type
 
+  // match函数：这个action参数的type是否与当前这个type值相等 // +++
   actionCreator.match = (action: Action<unknown>): action is PayloadAction =>
     action.type === type
 
+  // 返回actionCreator函数
   return actionCreator
 }
 

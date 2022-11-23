@@ -470,7 +470,11 @@ type CreateAsyncThunk<CurriedThunkApiConfig extends AsyncThunkConfig> = {
   >
 }
 
+// 当前是一个自执行函数的结果 - 其实就是自执行函数中的createAsyncThunk函数 // +++
+// 创建异步的thunk
 export const createAsyncThunk = (() => {
+
+  // 创建异步thunk函数 // +++
   function createAsyncThunk<
     Returned,
     ThunkArg,
@@ -489,19 +493,27 @@ export const createAsyncThunk = (() => {
     type FulfilledMeta = GetFulfilledMeta<ThunkApiConfig>
     type RejectedMeta = GetRejectedMeta<ThunkApiConfig>
 
+    // 类型前缀
+    // payload创建者
+    // options
+
+    // 返回actionCreator函数
     const fulfilled: AsyncThunkFulfilledActionCreator<
       Returned,
       ThunkArg,
       ThunkApiConfig
     > = createAction(
+      // type
       typePrefix + '/fulfilled',
+      // prepareAction
       (
         payload: Returned,
         requestId: string,
         arg: ThunkArg,
         meta?: FulfilledMeta
       ) => ({
-        payload,
+        payload, // 这个payload作为最终action对象的payload属性
+        // 这个meta对象作为最终action对象的meta属性
         meta: {
           ...((meta as any) || {}),
           arg,
@@ -511,6 +523,7 @@ export const createAsyncThunk = (() => {
       })
     )
 
+    // 返回actionCreator函数
     const pending: AsyncThunkPendingActionCreator<ThunkArg, ThunkApiConfig> =
       createAction(
         typePrefix + '/pending',
@@ -525,6 +538,7 @@ export const createAsyncThunk = (() => {
         })
       )
 
+    // 返回actionCreator函数
     const rejected: AsyncThunkRejectedActionCreator<ThunkArg, ThunkApiConfig> =
       createAction(
         typePrefix + '/rejected',
@@ -551,8 +565,10 @@ export const createAsyncThunk = (() => {
         })
       )
 
+    // 是否展示警告 // +++
     let displayedWarning = false
 
+    // AbortController类
     const AC =
       typeof AbortController !== 'undefined'
         ? AbortController
@@ -581,38 +597,59 @@ If you want to use the AbortController to react to \`abort\` events, please cons
             }
           }
 
+    // 准备action创建者函数 // +++
     function actionCreator(
-      arg: ThunkArg
+      arg: ThunkArg // 一个参数
     ): AsyncThunkAction<Returned, ThunkArg, ThunkApiConfig> {
-      return (dispatch, getState, extra) => {
+
+      // 直接就返回一个函数 // +++
+      return (dispatch, getState, extra) => { // 在thunk middleware中的action参数函数中判断类型是一个函数，那么将直接执行这个函数并传入它所在的dispatch, getState, extra（额外的）参数 // +++
+
+        // 是否有id生成器
         const requestId = options?.idGenerator
           ? options.idGenerator(arg)
-          : nanoid()
+          : nanoid() // 没有则直接使用nanoid进行生成 // +++
 
+        // 创建一个AbortController类实例对象 // +++
         const abortController = new AC()
+
+        // 准备abort原因
         let abortReason: string | undefined
 
+        // 准备aborted promise
         const abortedPromise = new Promise<never>((_, reject) =>
           abortController.signal.addEventListener('abort', () =>
             reject({ name: 'AbortError', message: abortReason || 'Aborted' })
           )
         )
 
+        // 是否已开始
         let started = false
+
+        // abort函数
         function abort(reason?: string) {
+          // 已开始则添加原因然后执行AbortController类实例的abort函数 // +++
           if (started) {
             abortReason = reason
             abortController.abort()
           }
         }
 
+        
+        // 这是一个自执行函数所返回的结果 - 一个promise // +++
         const promise = (async function () {
+          // 准备最终action对象 // +++
           let finalAction: ReturnType<typeof fulfilled | typeof rejected>
           try {
+            // 首先对condition函数进行执行
             let conditionResult = options?.condition?.(arg, { getState, extra })
+
+            // 执行的结果是否可then
             if (isThenable(conditionResult)) {
+              // 说明它是一个promise那么直接await它
               conditionResult = await conditionResult
             }
+            // 当前结果值是否为false - 那么直接【throw】 // +++
             if (conditionResult === false) {
               // eslint-disable-next-line no-throw-literal
               throw {
@@ -620,20 +657,31 @@ If you want to use the AbortController to react to \`abort\` events, please cons
                 message: 'Aborted due to condition callback returning false.',
               }
             }
+
+            // 标记已开始 // +++
             started = true
+
+            // 派发
             dispatch(
+              // 执行关于pending的actionCreator函数 - 返回一个关于pending的action对象 // +++
               pending(
                 requestId,
                 arg,
+                // 执行获取pending元数据 // +++
                 options?.getPendingMeta?.(
                   { requestId, arg },
                   { getState, extra }
                 )
               )
             )
+
+            // 竞速 且 await返回的这个promise得到最终action对象 // +++
             finalAction = await Promise.race([
-              abortedPromise,
+              abortedPromise, // 上方准备好的abortedPromise
+
+              // 使用Promise.resolve函数等待payload创建者函数所返回的值 - 可能应该是一个promise // +++
               Promise.resolve(
+                // 执行payload创建者函数 - 返回值交给Promise.resolve函数的参数 // +++
                 payloadCreator(arg, {
                   dispatch,
                   getState,
@@ -651,16 +699,22 @@ If you want to use the AbortController to react to \`abort\` events, please cons
                     return new FulfillWithMeta(value, meta)
                   }) as any,
                 })
-              ).then((result) => {
+              ) /** 再对这个promise进行then */ .then((result) => {
                 if (result instanceof RejectWithValue) {
                   throw result
                 }
                 if (result instanceof FulfillWithMeta) {
                   return fulfilled(result.payload, requestId, arg, result.meta)
                 }
+
+                // 执行关于fulfilled的actionCreator函数产生一个关于fulfilled的action对象 - 交出去 // +++
                 return fulfilled(result as any, requestId, arg)
+                // action对象的payload属性就是这个result值 // +++
               }),
             ])
+            // 得到最终action对象 // +++
+
+            // +++
           } catch (err) {
             finalAction =
               err instanceof RejectWithValue
@@ -672,28 +726,38 @@ If you want to use the AbortController to react to \`abort\` events, please cons
           // per https://twitter.com/dan_abramov/status/770914221638942720
           // and https://github.com/reduxjs/redux-toolkit/blob/e85eb17b39a2118d859f7b7746e0f3fee523e089/docs/tutorials/advanced-tutorial.md#async-error-handling-logic-in-thunks
 
+          // 是否跳过接下来的dispatch
           const skipDispatch =
             options &&
             !options.dispatchConditionRejection &&
             rejected.match(finalAction) &&
             (finalAction as any).meta.condition
 
+          // 不跳过则直接派发这个最终action对象 // +++
           if (!skipDispatch) {
             dispatch(finalAction)
           }
-          return finalAction
+
+          /// 返回最终action对象
+          return finalAction // +++
         })()
+
+
+        // 返回这个promise - 且在这个promise上添加abort、requestId、arg、unwrap属性 // +++
         return Object.assign(promise as Promise<any>, {
           abort,
           requestId,
           arg,
+          // 展开函数
           unwrap() {
-            return promise.then<any>(unwrapResult)
+            return promise.then<any>(unwrapResult) // 使用展开结果函数
           },
         })
       }
     }
 
+
+    // 返回actionCreator函数 - 且在这个函数上添加pending、rejected、fulfilled、typePrefix属性
     return Object.assign(
       actionCreator as AsyncThunkActionCreator<
         Returned,
@@ -708,10 +772,24 @@ If you want to use the AbortController to react to \`abort\` events, please cons
       }
     )
   }
+
+  // 添加withTypes属性值为这个箭头函数，而这个函数执行的返回值依然是这个createAsyncThunk函数 // +++
   createAsyncThunk.withTypes = () => createAsyncThunk
 
+  // 返回这个函数
   return createAsyncThunk as CreateAsyncThunk<AsyncThunkConfig>
 })()
+
+/* 
+createAsyncThunk函数执行返回actionCreator函数，而这个函数执行返回(dispatch, getState, extra)参数函数
+再然后这个函数直接是在thunk middleware中的action参数函数中判断类型为函数直接return 这个函数(...)这样的
+实际上返回的就是上面的那个promise
+
+随后你可以dispatch(...).unwarp().then(val => {...})这种形式的操作
+可以这样
+也可以不这样 - 因为其内部会dispatch(fulfilled(...))
+那么你可以在extraReducers: builder => builder.addCase(xxx.fulfilled, (state, action) => {...})这样做 // +++
+*/
 
 interface UnwrappableAction {
   payload: any
@@ -727,23 +805,24 @@ type UnwrappedActionPayload<T extends UnwrappableAction> = Exclude<
 /**
  * @public
  */
-export function unwrapResult<R extends UnwrappableAction>(
+export function unwrapResult<R extends UnwrappableAction>( // 展开结果 // +++
   action: R
 ): UnwrappedActionPayload<R> {
+  // 最终action对象上的元数据
   if (action.meta && action.meta.rejectedWithValue) {
-    throw action.payload
+    throw action.payload // 抛出
   }
   if (action.error) {
-    throw action.error
+    throw action.error // 抛出
   }
-  return action.payload
+  return action.payload // 直接取出action对象的payload属性值然后进行返回 // +++
 }
 
 type WithStrictNullChecks<True, False> = undefined extends boolean
   ? False
   : True
 
-function isThenable(value: any): value is PromiseLike<any> {
+function isThenable(value: any): value is PromiseLike<any> { // 是否为可then的 // +++
   return (
     value !== null &&
     typeof value === 'object' &&

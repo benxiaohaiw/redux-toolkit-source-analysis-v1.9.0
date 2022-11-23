@@ -49,7 +49,9 @@ export type CurriedGetDefaultMiddleware<S = any> = <
 export function curryGetDefaultMiddleware<
   S = any
 >(): CurriedGetDefaultMiddleware<S> {
+  // 返回函数
   return function curriedGetDefaultMiddleware(options) {
+    // 直接执行getDefaultMiddleware函数并返回 // +++
     return getDefaultMiddleware(options)
   }
 }
@@ -76,24 +78,33 @@ export function getDefaultMiddleware<
 >(
   options: O = {} as O
 ): MiddlewareArray<ExcludeFromTuple<[ThunkMiddlewareFor<S, O>], never>> {
+
+  // 参数默认全部是true // +++
   const {
     thunk = true,
     immutableCheck = true,
     serializableCheck = true,
   } = options
 
-  let middlewareArray = new MiddlewareArray<Middleware[]>()
+  // 创建一个MiddlewareArray实例对象
+  let middlewareArray = new MiddlewareArray<Middleware[]>() // 它是继承Array的实际上就是一个数组 // +++
 
+  // 如果开启了thunk
   if (thunk) {
-    if (isBoolean(thunk)) {
+    if (isBoolean(thunk)) { // 是true则直接推入thunkMiddleware函数 // +++
       middlewareArray.push(thunkMiddleware)
     } else {
+      // 不是布尔值的话需要通过thunkMiddleware.withExtraArgument处理一下 // +++
       middlewareArray.push(
-        thunkMiddleware.withExtraArgument(thunk.extraArgument)
+        thunkMiddleware.withExtraArgument(thunk.extraArgument) // +++
       )
     }
   }
 
+  // +++
+  // 开发模式下默认中间件的顺序是immutableCheck thunkMiddleware serializableCheck
+  // 而生产模式下默认中间的顺序是thunkMiddleware
+  // +++
   if (process.env.NODE_ENV !== 'production') {
     if (immutableCheck) {
       /* PROD_START_REMOVE_UMD */
@@ -122,5 +133,6 @@ export function getDefaultMiddleware<
     }
   }
 
+  // 返回 // +++
   return middlewareArray as any
 }

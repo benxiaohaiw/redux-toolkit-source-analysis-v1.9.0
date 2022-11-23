@@ -167,7 +167,7 @@ export function createSerializableStateInvariantMiddleware(
     ignoreActions = false,
   } = options
 
-  return (storeAPI) => (next) => (action) => {
+  return (storeAPI) => (next) /** compose函数所返回的开关函数开始执行将会首先引发这个函数执行，它将返回后面这个函数，而后面这个函数将作为thunk middleware下的next参数 */ => (action) => {
     const result = next(action)
 
     const measureUtils = getTimeMeasureUtils(

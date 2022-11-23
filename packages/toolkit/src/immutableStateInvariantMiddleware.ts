@@ -229,7 +229,10 @@ export function createImmutableStateInvariantMiddleware(
     let tracker = track(state)
 
     let result
-    return (next) => (action) => {
+    return (next) /** 开发模式下next参数为benxiaohaiw/redux-thunk-source-analysis-v2.4.2/src/index.ts下的action参数函数 */ => (action) => { // 这个返回的函数将作为compose函数执行返回的开关函数执行后所返回的最终结果
+      // 也就是在benxiaohaiw/redux-source-analysis-v5.0.0-alpha.0/src/applyMiddleware.ts下的赋值为dispatch变量的那行代码，那么那里的dispatch函数就是这里的action参数函数
+      // 所以也就从而验证了对compose函数执行所返回的开关函数的执行结果就是函数数组第一个元素函数执行后所返回的结果
+      // 在packages/toolkit/src/getDefaultMiddleware.ts下也说了开发模式下默认中间件的顺序是immutableCheck thunkMiddleware serializableCheck
       const measureUtils = getTimeMeasureUtils(
         warnAfter,
         'ImmutableStateInvariantMiddleware'

@@ -228,12 +228,15 @@ interface ComposeWithDevTools {
  */
 export const composeWithDevTools: ComposeWithDevTools =
   typeof window !== 'undefined' &&
-  (window as any).__REDUX_DEVTOOLS_EXTENSION_COMPOSE__
-    ? (window as any).__REDUX_DEVTOOLS_EXTENSION_COMPOSE__
+  (window as any).__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ // 变量是否存在
+    ? (window as any).__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ // 有的话取这个函数
     : function () {
         if (arguments.length === 0) return undefined
-        if (typeof arguments[0] === 'object') return compose
-        return compose.apply(null, arguments as any as Function[])
+        if (typeof arguments[0] === 'object') return compose // +++
+        
+        /// ++++++
+        return compose.apply(null, arguments as any as Function[] /** ++++++ */)
+        // 这里在ts中它是这样去解决的 - 双重as断言 // ++++++
       }
 
 /**

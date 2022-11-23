@@ -256,8 +256,9 @@ export type ValidateSliceCaseReducers<
       : {}
   }
 
+// 获取类型
 function getType(slice: string, actionKey: string): string {
-  return `${slice}/${actionKey}`
+  return `${slice}/${actionKey}` // 返回这种格式的字符串
 }
 
 /**
@@ -293,30 +294,66 @@ export function createSlice<
     }
   }
 
+  /* 
+  options
+  {
+    name
+    initialState
+    reducers
+    extraReducers
+  }
+  */
+
+  // initialState参数支持函数
   const initialState =
     typeof options.initialState == 'function'
       ? options.initialState
-      : freezeDraftable(options.initialState)
+      : freezeDraftable(options.initialState) // 可起草的（打草稿）冻结
+  /* 
+  ./utils.ts下的freezeDraftable函数主要就是使用immer下的produce函数对数组、对象进行深度冻结（Object.freeze）
+  */
 
   const reducers = options.reducers || {}
 
+  // 取出reducers对象的所有key
   const reducerNames = Object.keys(reducers)
 
+  /* 
+  options: {
+    name: 'counter'
+    reducers: {
+      decrement() {
+        // ...
+      }
+    }
+  }
+  */
+
+  // { decrement=>fn }
   const sliceCaseReducersByName: Record<string, CaseReducer> = {}
+
+  // { counter/decrement=>fn }
   const sliceCaseReducersByType: Record<string, CaseReducer> = {}
+
+  // { decrement=>actionCreator函数（在createAction函数中形成闭包） }
   const actionCreators: Record<string, Function> = {}
 
   reducerNames.forEach((reducerName) => {
+    // 可能是带有prepare的reducer
     const maybeReducerWithPrepare = reducers[reducerName]
+
+    // 获取类型 -> counter/decrement
     const type = getType(name, reducerName)
 
     let caseReducer: CaseReducer<State, any>
     let prepareCallback: PrepareAction<any> | undefined
 
+    // { reducer, prepare }
     if ('reducer' in maybeReducerWithPrepare) {
       caseReducer = maybeReducerWithPrepare.reducer
       prepareCallback = maybeReducerWithPrepare.prepare
     } else {
+      // 直接就是一个函数
       caseReducer = maybeReducerWithPrepare
     }
 
@@ -327,6 +364,7 @@ export function createSlice<
       : createAction(type)
   })
 
+  // 准备构建reducer函数
   function buildReducer() {
     if (process.env.NODE_ENV !== 'production') {
       if (typeof options.extraReducers === 'object') {
@@ -338,45 +376,63 @@ export function createSlice<
         }
       }
     }
+
+    // options中是否有extraReducers函数
+
+    // extra: 额外的 // +++
+    
     const [
-      extraReducers = {},
-      actionMatchers = [],
-      defaultCaseReducer = undefined,
+      extraReducers = {}, // 我想它应该也是{ counter/xxx: fn } - 见下一个行代码所理解
+      actionMatchers = [], // [{ matcher, reducer }]
+      defaultCaseReducer = undefined, // default reducer
     ] =
       typeof options.extraReducers === 'function'
-        ? executeReducerBuilderCallback(options.extraReducers)
+        ? executeReducerBuilderCallback(options.extraReducers) // 执行reducer构建者cb // packages/toolkit/src/mapBuilders.ts
         : [options.extraReducers]
 
+    // 最终
     const finalCaseReducers = { ...extraReducers, ...sliceCaseReducersByType }
 
-    return createReducer(initialState, (builder) => {
+    // 创建reducer // +++
+    return createReducer(initialState, (builder) => { // 返回一个reducer函数
+      // 遍历最终{ counter/xxx: fn }
       for (let key in finalCaseReducers) {
         builder.addCase(key, finalCaseReducers[key] as CaseReducer<any>)
       }
+      // 遍历[{ matcher, reducer }]
       for (let m of actionMatchers) {
         builder.addMatcher(m.matcher, m.reducer)
       }
+      // default reducer
       if (defaultCaseReducer) {
         builder.addDefaultCase(defaultCaseReducer)
       }
     })
   }
 
+  // 准备标记
   let _reducer: ReducerWithInitialState<State>
 
+  // 返回一个对象 // +++
   return {
     name,
+
+    // reducer函数
     reducer(state, action) {
-      if (!_reducer) _reducer = buildReducer()
+      if (!_reducer) _reducer = buildReducer() // 执行buildReducer函数
 
-      return _reducer(state, action)
+      return _reducer(state, action) // 执行_reducer函数
     },
-    actions: actionCreators as any,
-    caseReducers: sliceCaseReducersByName as any,
-    getInitialState() {
-      if (!_reducer) _reducer = buildReducer()
 
-      return _reducer.getInitialState()
+    actions: actionCreators as any, // { decrement=>actionCreator函数（在createAction函数中形成闭包） }
+    
+    caseReducers: sliceCaseReducersByName as any, // { decrement=>fn }
+
+    // 获取初始化状态
+    getInitialState() {
+      if (!_reducer) _reducer = buildReducer() // 执行buildReducer函数
+
+      return _reducer.getInitialState() // 通过它获取 // +++
     },
   }
 }

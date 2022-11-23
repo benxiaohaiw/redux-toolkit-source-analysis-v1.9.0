@@ -123,6 +123,7 @@ const reducer = createReducer(initialState, builder => {
   addDefaultCase(reducer: CaseReducer<State, AnyAction>): {}
 }
 
+// 执行reducer构建者cb
 export function executeReducerBuilderCallback<S>(
   builderCallback: (builder: ActionReducerMapBuilder<S>) => void
 ): [
@@ -130,10 +131,19 @@ export function executeReducerBuilderCallback<S>(
   ActionMatcherDescriptionCollection<S>,
   CaseReducer<S, AnyAction> | undefined
 ] {
+
+  // 
   const actionsMap: CaseReducers<S, any> = {}
+
+  // 
   const actionMatchers: ActionMatcherDescriptionCollection<S> = []
+
+  // 
   let defaultCaseReducer: CaseReducer<S, AnyAction> | undefined
+
+  // 准备构建者对象 // +++
   const builder = {
+    // { counter/xxx: fn }
     addCase(
       typeOrActionCreator: string | TypedActionCreator<any>,
       reducer: CaseReducer<S>
@@ -167,6 +177,7 @@ export function executeReducerBuilderCallback<S>(
       actionsMap[type] = reducer
       return builder
     },
+    // [{ matcher, reducer }]
     addMatcher<A>(
       matcher: TypeGuard<A>,
       reducer: CaseReducer<S, A extends AnyAction ? A : A & AnyAction>
@@ -181,6 +192,7 @@ export function executeReducerBuilderCallback<S>(
       actionMatchers.push({ matcher, reducer })
       return builder
     },
+    // default reducer
     addDefaultCase(reducer: CaseReducer<S, AnyAction>) {
       if (process.env.NODE_ENV !== 'production') {
         if (defaultCaseReducer) {
@@ -191,6 +203,10 @@ export function executeReducerBuilderCallback<S>(
       return builder
     },
   }
-  builderCallback(builder)
+
+  // 执行参数cb
+  builderCallback(builder) // 传入构建者对象 // +++
+  
+  // {} [] fn
   return [actionsMap, actionMatchers, defaultCaseReducer]
 }
